@@ -12,10 +12,15 @@ from rest_framework.views import APIView
 from rest_framework import mixins
 from rest_framework import generics
 from rest_framework import viewsets
-from rest_framework.authentication import BasicAuthentication,SessionAuthentication
+from rest_framework.authentication import BasicAuthentication,SessionAuthentication,TokenAuthentication
 from rest_framework.permissions import IsAdminUser,IsAuthenticated,DjangoModelPermissions
 from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import ValidationError
+# from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.throttling import UserRateThrottle,AnonRateThrottle
+from .api_file.throttling import ReviewDetailThrottle,Reviewlistthrottle
+from .api_file.pagination import ReviewlistPagination,Reviewlistlimitoffpag
+
 
 # Create your views here.
 
@@ -60,22 +65,32 @@ from rest_framework.exceptions import ValidationError
 
 class ReviewCreate(generics.CreateAPIView):
     serializer_class=ReviewSerializers
+    authentication_classes = [TokenAuthentication]  # Add TokenAuthentication
+    permission_classes = [IsAuthenticated]  # Add IsAuthenticated
 
     def get_queryset(self):
         return Review.objects.all()
 
-    def perform_create(self, serializer):
+    def perform_create(self,serializer):
         pk=self.kwargs['pk']
         cars=Carlist.objects.get(pk=pk)
+
+        # authentication_classes=[TokenAuthentication]
+        # permission_classes=[IsAuthenticated]
         useredit=self.request.user
         Review_queryset=Review.objects.filter(car=cars,apiuser=useredit)
         if Review_queryset.exists():
             raise ValidationError("You have already viewed this car")
-        serializer.save(car=cars)
+        # serializer.validated_data['apiuser'] = useredit
+        serializer.save(car=cars,apiuser=useredit)
 
 class ReviewList(generics.ListAPIView):   #Generic View
     # queryset=Review.objects.all()
     serializer_class=ReviewSerializers
+    authentication_classes=[TokenAuthentication]
+    # throttle_classes=[Reviewlistthrottle]
+    # permission_classes=[IsAuthenticated]
+    pagination_class=Reviewlistlimitoffpag
     def get_queryset(self):
         pk=self.kwargs['pk']
         return Review.objects.filter(car=pk)
@@ -83,7 +98,9 @@ class ReviewList(generics.ListAPIView):   #Generic View
 class ReviewDetail(generics.RetrieveUpdateDestroyAPIView):  #Generic View
     queryset=Review.objects.all()
     serializer_class=ReviewSerializers
-    permission_classes=[ReviewUserorReadonlypermission]
+    authentication_classes=[TokenAuthentication]
+    # throttle_classes=[ReviewDetailThrottle]
+    # permission_classes=[IsAuthenticated]
 
 # class Showroom_Viewset(viewsets.ReadOnlyModelViewSet):    ##Model View set
 #     queryset = Showroomlist.objects.all()
@@ -122,7 +139,7 @@ class Showroom_Viewset(viewsets.ViewSet):       #ViewSet and Routers
 
     
 class Showroom_View(APIView):
-    # authentication_classes=[BasicAuthentication]
+    authentication_classes=[BasicAuthentication]
     # permission_classes=[IsAuthenticated]
     # permission_classes=[AllowAny]
     # permission_classes=[IsAdminUser]
